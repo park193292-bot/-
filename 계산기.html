@@ -1,0 +1,604 @@
+```html
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>프리미엄 클래식 공학용 계산기</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Math.js for robust mathematical evaluations -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.js"></script>
+  <!-- Google Fonts for retro LCD and clean styling -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <style>
+    /* LCD 화면 폰트 및 감성 극대화 */
+    .lcd-font {
+      font-family: 'Share Tech Mono', 'Courier New', Courier, monospace;
+    }
+    .body-font {
+      font-family: 'Noto Sans KR', sans-serif;
+    }
+    /* 그림자 및 물리 버튼 느낌 스타일링 */
+    .calc-shadow {
+      box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.9);
+    }
+    
+    /* 햅틱/피드백 느낌을 주는 세련된 버튼 액션 */
+    .btn-push {
+      transition: transform 0.05s ease, background-color 0.1s ease;
+      position: relative;
+      touch-action: manipulation; /* 모바일 더블탭 줌 방지 및 즉각 터치 */
+    }
+    .btn-push:active {
+      transform: scale(0.95) translateY(1px);
+      filter: brightness(0.85);
+    }
+    
+    /* 버튼 반사광 효과 */
+    .btn-reflect::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 8%;
+      right: 8%;
+      height: 20%;
+      background: linear-gradient(to bottom, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 100%);
+      border-radius: 9999px;
+      pointer-events: none;
+    }
+    /* 스크롤바 숨기기 (LCD 내부) */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    
+    /* 전체 화면 고정 및 모바일 대응 */
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #0c0a09;
+    }
+  </style>
+</head>
+<body class="h-full w-full flex flex-col items-center justify-center body-font text-stone-100 p-0 m-0">
+
+  <!-- 메인 계산기 바디 컨테이너 (모바일에서 꽉 차게, 데스크톱에서 기기 비율 유지) -->
+  <div class="w-full h-full max-h-screen md:w-[450px] md:h-[96vh] md:max-h-[900px] bg-neutral-900 border-0 md:border-x-4 md:border-b-8 md:border-t-4 md:border-zinc-950 md:rounded-[2.5rem] p-3 md:p-5 calc-shadow flex flex-col justify-between relative overflow-hidden select-none">
+    
+    <!-- [1] 상단 카시오 로고 영역 -->
+    <div class="flex-none pt-1">
+      <div class="flex justify-between items-center px-4 pb-0.5 text-stone-300">
+        <span class="font-black text-2xl tracking-wider text-gray-200">CASIO</span>
+        <span class="text-xs tracking-widest font-semibold text-gray-400">fx-570ES PLUS <span class="text-[9px] font-light text-zinc-500">2nd edition</span></span>
+      </div>
+      <div class="text-center text-[10px] italic font-bold tracking-widest text-stone-500 mb-2">
+        NATURAL-V.P.A.M.
+      </div>
+    </div>
+
+    <!-- [2] 리얼 LCD 디스플레이 패널 -->
+    <div class="flex-none mx-1 bg-[#b5c4b2] border-4 border-neutral-800 rounded-xl p-3 shadow-inner flex flex-col justify-between relative overflow-hidden h-32 md:h-38 z-10">
+      <!-- 상단 인디케이터 라인 -->
+      <div class="flex justify-between text-[10px] font-bold text-stone-800/80 tracking-widest uppercase mb-1">
+        <div class="flex gap-2">
+          <span id="shift-indicator" class="opacity-10 transition-opacity duration-150">S</span>
+          <span id="alpha-indicator" class="opacity-10 transition-opacity duration-150 text-red-800">A</span>
+        </div>
+        <div class="flex gap-2">
+          <span class="border border-stone-800/40 px-1 rounded-[2px] leading-none text-[8px]">M</span>
+          <span id="angle-mode" class="border border-stone-800/60 bg-stone-800 text-[#b5c4b2] px-1 rounded-[2px] leading-none text-[8px]">DEG</span>
+          <span class="leading-none">Math ▲</span>
+        </div>
+      </div>
+      
+      <!-- LCD 격자용 가상 도트 오버레이 -->
+      <div class="absolute inset-0 bg-repeat pointer-events-none opacity-[0.03]" style="background-image: radial-gradient(circle, #000 1px, transparent 1px); background-size: 3px 3px;"></div>
+
+      <!-- 수식 및 결과 영역 -->
+      <div class="flex-1 flex flex-col justify-between lcd-font text-stone-900 mt-1">
+        <!-- 수식 입력창 -->
+        <div id="lcd-formula" class="text-xl md:text-2xl leading-normal text-right font-semibold overflow-x-auto no-scrollbar whitespace-nowrap scroll-smooth" dir="ltr">0</div>
+        <!-- 결과창 -->
+        <div id="lcd-result" class="text-3xl md:text-4xl text-right font-bold tracking-tight">0</div>
+      </div>
+    </div>
+
+    <!-- [3] 가이드 설명글 스티커 -->
+    <div class="flex-none flex justify-between px-6 py-1 text-[9px] md:text-xs font-bold text-stone-500">
+      <div class="text-amber-500">SHIFT</div>
+      <div class="text-pink-500">ALPHA</div>
+      <div class="text-stone-400">REPLAY</div>
+      <div class="text-stone-400">MODE SETUP</div>
+      <div class="text-stone-400">ON</div>
+    </div>
+
+    <!-- [4] 원형 조이스틱 및 상단 제어 기능부 (완전 격리 레이아웃으로 간섭 배제) -->
+    <div class="flex-none grid grid-cols-5 gap-x-2 px-1 mb-2 relative z-20">
+      <!-- SHIFT 버튼 -->
+      <div class="flex flex-col items-center justify-end">
+        <span class="text-[8px] font-bold text-amber-500 mb-0.5">SHIFT</span>
+        <button id="btn-shift" class="btn-push btn-reflect w-11 h-7 md:w-13 md:h-8 bg-zinc-700 hover:bg-zinc-600 rounded-full border-b-[3px] border-zinc-950 shadow-md text-xs font-black text-amber-500 flex items-center justify-center">S</button>
+      </div>
+      
+      <!-- ALPHA 버튼 -->
+      <div class="flex flex-col items-center justify-end">
+        <span class="text-[8px] font-bold text-pink-500 mb-0.5">ALPHA</span>
+        <button id="btn-alpha" class="btn-push btn-reflect w-11 h-7 md:w-13 md:h-8 bg-zinc-700 hover:bg-zinc-600 rounded-full border-b-[3px] border-zinc-950 shadow-md text-xs font-black text-pink-500 flex items-center justify-center">A</button>
+      </div>
+      
+      <!-- REPLAY (조이스틱 패드) -->
+      <div class="flex justify-center items-center">
+        <div class="w-16 h-16 md:w-18 md:h-18 bg-neutral-800 rounded-full border-4 border-zinc-950 shadow-lg relative flex items-center justify-center">
+          <div class="absolute inset-1.5 bg-neutral-700 rounded-full flex items-center justify-center shadow-inner">
+            <div class="w-10 h-1 bg-zinc-800 rounded-full absolute"></div>
+            <div class="w-1 h-10 bg-zinc-800 rounded-full absolute"></div>
+          </div>
+          <!-- 좌우 커서 이동 버튼 (터치 가로막기 제거 완료) -->
+          <button id="btn-replay-left" class="btn-push absolute left-1 w-5 h-7 text-zinc-400 text-xs font-bold flex items-center justify-center focus:outline-none z-30">◀</button>
+          <button id="btn-replay-right" class="btn-push absolute right-1 w-5 h-7 text-zinc-400 text-xs font-bold flex items-center justify-center focus:outline-none z-30">▶</button>
+        </div>
+      </div>
+      
+      <!-- MODE SETUP 버튼 -->
+      <div class="flex flex-col items-center justify-end">
+        <span class="text-[8px] font-bold text-stone-400 mb-0.5">MODE</span>
+        <button id="btn-mode" class="btn-push btn-reflect w-11 h-7 md:w-13 md:h-8 bg-zinc-700 hover:bg-zinc-600 rounded-full border-b-[3px] border-zinc-950 shadow-md text-[9px] font-bold text-stone-300 flex items-center justify-center">DEG</button>
+      </div>
+      
+      <!-- ON 버튼 -->
+      <div class="flex flex-col items-center justify-end">
+        <span class="text-[8px] font-bold text-stone-400 mb-0.5">RESET</span>
+        <button id="btn-on" class="btn-push btn-reflect w-11 h-7 md:w-13 md:h-8 bg-zinc-700 hover:bg-zinc-600 rounded-full border-b-[3px] border-zinc-950 shadow-md text-[9px] font-bold text-stone-300 flex items-center justify-center">ON</button>
+      </div>
+    </div>
+
+    <!-- [5] 과학/공학 서브 키패드 (그리드 패딩 가로폭 최적화) -->
+    <div class="flex-none grid grid-cols-6 gap-x-1 gap-y-1.5 px-1 bg-zinc-950/40 p-2 rounded-xl border border-zinc-800/80 relative z-10">
+      
+      <!-- 1st Row -->
+      <div class="flex flex-col items-center">
+        <span class="text-[8px] text-amber-500 font-semibold leading-none mb-0.5">x³</span>
+        <button data-val="^3" class="btn-sc btn-push btn-reflect w-full h-7 md:h-8 bg-zinc-800 hover:bg-zinc-700 rounded-md border-b-2 border-zinc-950 text-[10px] font-bold text-stone-300">x³</button>
+      </div>
+      <div class="flex flex-col items-center">
+        <span class="text-[8px] text-amber-500 font-semibold leading-none mb-0.5">x!</span>
+        <button data-val="!" class="btn-sc btn-push btn-reflect w-full h-7 md:h-8 bg-zinc-800 hover:bg-zinc-700 rounded-md border-b-2 border-zinc-950 text-[10px] font-bold text-stone-300">x!</button>
+      </div>
+      <div class="flex flex-col items-center">
+        <span class="text-[8px] text-amber-500 font-semibold leading-none mb-0.5">√</span>
+        <button data-val="sqrt(" class="btn-sc btn-push btn-reflect w-full h-7 md:h-8 bg-zinc-800 hover:bg-zinc-700 rounded-md border-b-2 border-zinc-950 text-[10px] font-bold text-stone-300">√</button>
+      </div>
+      <div class="flex flex-col items-center">
+        <span class="text-[8px] text-amber-500 font-semibold leading-none mb-0.5">x²</span>
+        <button data-val="^2" class="btn-sc btn-push btn-reflect w-full h-7 md:h-8 bg-zinc-800 hover:bg-zinc-700 rounded-md border-b-2 border-zinc-950 text-[10px] font-bold text-stone-300">x²</button>
+      </div>
+      <div class="flex flex-col items-center">
+        <span class="text-[8px] text-amber-500 font-semibold leading-none mb-0.5">xʸ</span>
+        <button data-val="^" class="btn-sc btn-push btn-reflect w-full h-7 md:h-8 bg-zinc-800 hover:bg-zinc-700 rounded-md border-b-2 border-zinc-950 text-[10px] font-bold text-stone-300">^</button>
+      </div>
+      <div class="flex flex-col items-center">
+        <span class="text-[8px] text-amber-500 font-semibold leading-none mb-0.5">log</span>
+        <button data-val="log10(" class="btn-sc btn-push btn-reflect w-full h-7 md:h-8 bg-zinc-800 hover:bg-zinc-700 rounded-md border-b-2 border-zinc-950 text-[10px] font-bold text-stone-300">log</button>
+      </div>
+
+      <!-- 2nd Row -->
+      <div class="flex flex-col items-center">
+        <span class="text-[8px] text-amber-500 font-semibold leading-none mb-0.5">ln</span>
+        <button data-val="log(" class="btn-sc btn-push btn-reflect w-full h-7 md:h-8 bg-zinc-800 hover:bg-zinc-700 rounded-md border-b-2 border-zinc-950 text-[10px] font-bold text-stone-300">ln</button>
+      </div>
+      <div class="flex flex-col items-center">
+        <span class="text-[8px] text-amber-500 font-semibold leading-none mb-0.5">asin</span>
+        <button data-val="asin(" class="btn-sc btn-push btn-reflect w-full h-7 md:h-8 bg-zinc-800 hover:bg-zinc-700 rounded-md border-b-2 border-zinc-950 text-[9px] font-bold text-stone-300">sin⁻¹</button>
+      </div>
+      <div class="flex flex-col items-center">
+        <span class="text-[8px] text-amber-500 font-semibold leading-none mb-0.5">acos</span>
+        <button data-val="acos(" class="btn-sc btn-push btn-reflect w-full h-7 md:h-8 bg-zinc-800 hover:bg-zinc-700 rounded-md border-b-2 border-zinc-950 text-[9px] font-bold text-stone-300">cos⁻¹</button>
+      </div>
+      <div class="flex flex-col items-center">
+        <span class="text-[8px] text-amber-500 font-semibold leading-none mb-0.5">atan</span>
+        <button data-val="atan(" class="btn-sc btn-push btn-reflect w-full h-7 md:h-8 bg-zinc-800 hover:bg-zinc-700 rounded-md border-b-2 border-zinc-950 text-[9px] font-bold text-stone-300">tan⁻¹</button>
+      </div>
+      <div class="flex flex-col items-center">
+        <span class="text-[8px] text-amber-500 font-semibold leading-none mb-0.5">sin</span>
+        <button data-val="sin(" class="btn-sc btn-push btn-reflect w-full h-7 md:h-8 bg-zinc-800 hover:bg-zinc-700 rounded-md border-b-2 border-zinc-950 text-[10px] font-bold text-stone-300">sin</button>
+      </div>
+      <div class="flex flex-col items-center">
+        <span class="text-[8px] text-amber-500 font-semibold leading-none mb-0.5">cos</span>
+        <button data-val="cos(" class="btn-sc btn-push btn-reflect w-full h-7 md:h-8 bg-zinc-800 hover:bg-zinc-700 rounded-md border-b-2 border-zinc-950 text-[10px] font-bold text-stone-300">cos</button>
+      </div>
+
+      <!-- 3rd Row -->
+      <div class="flex flex-col items-center">
+        <span class="text-[8px] text-amber-500 font-semibold leading-none mb-0.5">tan</span>
+        <button data-val="tan(" class="btn-sc btn-push btn-reflect w-full h-7 md:h-8 bg-zinc-800 hover:bg-zinc-700 rounded-md border-b-2 border-zinc-950 text-[10px] font-bold text-stone-300">tan</button>
+      </div>
+      <div class="flex flex-col items-center">
+        <span class="text-[8px] text-pink-500 font-semibold leading-none mb-0.5">e</span>
+        <button data-val="e" class="btn-sc btn-push btn-reflect w-full h-7 md:h-8 bg-zinc-800 hover:bg-zinc-700 rounded-md border-b-2 border-zinc-950 text-[10px] font-bold text-stone-300">e</button>
+      </div>
+      <div class="flex flex-col items-center">
+        <span class="text-[8px] text-amber-500 font-semibold leading-none mb-0.5">％</span>
+        <button data-val="%" class="btn-sc btn-push btn-reflect w-full h-7 md:h-8 bg-zinc-800 hover:bg-zinc-700 rounded-md border-b-2 border-zinc-950 text-[10px] font-bold text-stone-300">%</button>
+      </div>
+      <div class="flex flex-col items-center">
+        <span class="text-[8px] text-amber-500 font-semibold leading-none mb-0.5">(</span>
+        <button data-val="(" class="btn-sc btn-push btn-reflect w-full h-7 md:h-8 bg-zinc-800 hover:bg-zinc-700 rounded-md border-b-2 border-zinc-950 text-[10px] font-bold text-stone-300">(</button>
+      </div>
+      <div class="flex flex-col items-center">
+        <span class="text-[8px] text-amber-500 font-semibold leading-none mb-0.5">)</span>
+        <button data-val=")" class="btn-sc btn-push btn-reflect w-full h-7 md:h-8 bg-zinc-800 hover:bg-zinc-700 rounded-md border-b-2 border-zinc-950 text-[10px] font-bold text-stone-300">)</button>
+      </div>
+      <div class="flex flex-col items-center">
+        <span class="text-[8px] text-amber-500 font-semibold leading-none mb-0.5">abs</span>
+        <button data-val="abs(" class="btn-sc btn-push btn-reflect w-full h-7 md:h-8 bg-zinc-800 hover:bg-zinc-700 rounded-md border-b-2 border-zinc-950 text-[10px] font-bold text-stone-300">abs</button>
+      </div>
+    </div>
+
+    <!-- [6] 하단 실무 대형 키패드 (flex-grow로 남은 화면을 풍성하게 충전) -->
+    <div class="flex-1 grid grid-cols-5 gap-1.5 px-1 mt-2 pb-1 relative z-10">
+      
+      <!-- 1행: 숫자 7, 8, 9, DEL, AC -->
+      <button data-num="7" class="btn-dg btn-push btn-reflect bg-neutral-700 hover:bg-neutral-600 rounded-xl text-2xl font-bold text-white border-b-4 border-zinc-950 flex items-center justify-center">7</button>
+      <button data-num="8" class="btn-dg btn-push btn-reflect bg-neutral-700 hover:bg-neutral-600 rounded-xl text-2xl font-bold text-white border-b-4 border-zinc-950 flex items-center justify-center">8</button>
+      <button data-num="9" class="btn-dg btn-push btn-reflect bg-neutral-700 hover:bg-neutral-600 rounded-xl text-2xl font-bold text-white border-b-4 border-zinc-950 flex items-center justify-center">9</button>
+      
+      <!-- DEL (라임/그린 계열) -->
+      <button id="btn-del" class="btn-push btn-reflect bg-emerald-700 hover:bg-emerald-600 rounded-xl text-base font-extrabold text-white border-b-4 border-emerald-950 flex flex-col items-center justify-center">
+        <span class="text-[9px] text-amber-300 font-normal">INS</span>
+        <span>DEL</span>
+      </button>
+      
+      <!-- AC (라임/그린 계열) -->
+      <button id="btn-ac" class="btn-push btn-reflect bg-emerald-700 hover:bg-emerald-600 rounded-xl text-base font-extrabold text-white border-b-4 border-emerald-950 flex flex-col items-center justify-center">
+        <span class="text-[9px] text-amber-300 font-normal">OFF</span>
+        <span>AC</span>
+      </button>
+
+      <!-- 2행: 숫자 4, 5, 6, 곱하기, 나누기 -->
+      <button data-num="4" class="btn-dg btn-push btn-reflect bg-neutral-700 hover:bg-neutral-600 rounded-xl text-2xl font-bold text-white border-b-4 border-zinc-950 flex items-center justify-center">4</button>
+      <button data-num="5" class="btn-dg btn-push btn-reflect bg-neutral-700 hover:bg-neutral-600 rounded-xl text-2xl font-bold text-white border-b-4 border-zinc-950 flex items-center justify-center">5</button>
+      <button data-num="6" class="btn-dg btn-push btn-reflect bg-neutral-700 hover:bg-neutral-600 rounded-xl text-2xl font-bold text-white border-b-4 border-zinc-950 flex items-center justify-center">6</button>
+      <button data-op="*" class="btn-op btn-push btn-reflect bg-stone-600 hover:bg-stone-500 rounded-xl text-3xl font-bold text-stone-200 border-b-4 border-zinc-950 flex items-center justify-center">×</button>
+      <button data-op="/" class="btn-op btn-push btn-reflect bg-stone-600 hover:bg-stone-500 rounded-xl text-3xl font-bold text-stone-200 border-b-4 border-zinc-950 flex items-center justify-center">÷</button>
+
+      <!-- 3행: 숫자 1, 2, 3, 더하기, 빼기 -->
+      <button data-num="1" class="btn-dg btn-push btn-reflect bg-neutral-700 hover:bg-neutral-600 rounded-xl text-2xl font-bold text-white border-b-4 border-zinc-950 flex items-center justify-center">1</button>
+      <button data-num="2" class="btn-dg btn-push btn-reflect bg-neutral-700 hover:bg-neutral-600 rounded-xl text-2xl font-bold text-white border-b-4 border-zinc-950 flex items-center justify-center">2</button>
+      <button data-num="3" class="btn-dg btn-push btn-reflect bg-neutral-700 hover:bg-neutral-600 rounded-xl text-2xl font-bold text-white border-b-4 border-zinc-950 flex items-center justify-center">3</button>
+      <button data-op="+" class="btn-op btn-push btn-reflect bg-stone-600 hover:bg-stone-500 rounded-xl text-3xl font-bold text-stone-200 border-b-4 border-zinc-950 flex items-center justify-center">+</button>
+      <button data-op="-" class="btn-op btn-push btn-reflect bg-stone-600 hover:bg-stone-500 rounded-xl text-3xl font-bold text-stone-200 border-b-4 border-zinc-950 flex items-center justify-center">-</button>
+
+      <!-- 4행: 숫자 0, 소수점, 10^x, Ans, 등호 -->
+      <button data-num="0" class="btn-dg btn-push btn-reflect bg-neutral-700 hover:bg-neutral-600 rounded-xl text-2xl font-bold text-white border-b-4 border-zinc-950 flex items-center justify-center">0</button>
+      <button data-num="." class="btn-dg btn-push btn-reflect bg-neutral-700 hover:bg-neutral-600 rounded-xl text-3xl font-bold text-white border-b-4 border-zinc-950 flex items-center justify-center">.</button>
+      <button data-op="*10^" class="btn-op btn-push btn-reflect bg-stone-600 hover:bg-stone-500 rounded-xl text-sm font-bold text-stone-200 border-b-4 border-zinc-950 flex items-center justify-center">×10ˣ</button>
+      <button id="btn-ans" class="btn-push btn-reflect bg-stone-600 hover:bg-stone-500 rounded-xl text-base font-bold text-stone-200 border-b-4 border-zinc-950 flex items-center justify-center">Ans</button>
+      <button id="btn-equals" class="btn-push btn-reflect bg-stone-600 hover:bg-stone-500 rounded-xl text-3xl font-bold text-stone-200 border-b-4 border-zinc-950 flex items-center justify-center">=</button>
+
+    </div>
+
+    <!-- 고무 지지 패드 효과 데코 -->
+    <div class="flex-none h-1.5 w-1/4 bg-zinc-950 rounded-full mx-auto mt-1"></div>
+  </div>
+
+  <script>
+    // ----------------------------------------------------
+    // 1. 계산기 시스템 상태 변수 정의
+    // ----------------------------------------------------
+    let currentInput = "0"; 
+    let lastResult = "0";   
+    let isShiftActive = false;
+    let isAlphaActive = false;
+    let angleMode = "DEG"; 
+
+    // ----------------------------------------------------
+    // 2. DOM 엘리먼트 메모리 캐싱
+    // ----------------------------------------------------
+    const lcdFormula = document.getElementById('lcd-formula');
+    const lcdResult = document.getElementById('lcd-result');
+    const shiftIndicator = document.getElementById('shift-indicator');
+    const alphaIndicator = document.getElementById('alpha-indicator');
+    const angleModeIndicator = document.getElementById('angle-mode');
+
+    // ----------------------------------------------------
+    // 3. 디바이스 입력 안정화 (터치 및 클릭 동시 대응 리스너 바인딩)
+    // ----------------------------------------------------
+    function bindInteractiveAction(element, handler) {
+      if (!element) return;
+      
+      // 모바일 환경에서의 터치 즉각 반응
+      element.addEventListener('touchstart', (e) => {
+        e.preventDefault(); // 기본 스크롤 및 지연 클릭 무효화
+        handler();
+      }, { passive: false });
+
+      // 데스크톱 마우스 클릭 대응
+      element.addEventListener('click', (e) => {
+        e.preventDefault();
+        handler();
+      });
+    }
+
+    // [A] 숫자 키 바인딩
+    document.querySelectorAll('[data-num]').forEach(btn => {
+      bindInteractiveAction(btn, () => {
+        const val = btn.getAttribute('data-num');
+        input(val);
+      });
+    });
+
+    // [B] 사칙연산 및 지수 연산자 바인딩
+    document.querySelectorAll('[data-op]').forEach(btn => {
+      bindInteractiveAction(btn, () => {
+        const val = btn.getAttribute('data-op');
+        input(val);
+      });
+    });
+
+    // [C] 과학/공학 서브 특수 기능키 바인딩
+    document.querySelectorAll('[data-val]').forEach(btn => {
+      bindInteractiveAction(btn, () => {
+        const val = btn.getAttribute('data-val');
+        input(val);
+      });
+    });
+
+    // [D] 주요 고정 제어 기능 키 바인딩
+    bindInteractiveAction(document.getElementById('btn-shift'), toggleShift);
+    bindInteractiveAction(document.getElementById('btn-alpha'), toggleAlpha);
+    bindInteractiveAction(document.getElementById('btn-mode'), toggleAngleMode);
+    bindInteractiveAction(document.getElementById('btn-on'), clearAll);
+    bindInteractiveAction(document.getElementById('btn-del'), deleteLast);
+    bindInteractiveAction(document.getElementById('btn-ac'), clearAll);
+    bindInteractiveAction(document.getElementById('btn-ans'), inputAns);
+    bindInteractiveAction(document.getElementById('btn-equals'), calculate);
+
+    // [E] 조이스틱 방향 네비게이터 바인딩
+    bindInteractiveAction(document.getElementById('btn-replay-left'), () => moveCursor('left'));
+    bindInteractiveAction(document.getElementById('btn-replay-right'), () => moveCursor('right'));
+
+
+    // ----------------------------------------------------
+    // 4. 입력 핵심 로직 처리
+    // ----------------------------------------------------
+    function input(value) {
+      if (currentInput === "0" && !isNaN(value) && value !== ".") {
+        currentInput = value;
+      } else {
+        // 특정 주요 수식이 빈 공간에 기입될 때의 첫 자리 자동 정리
+        if (currentInput === "0" && (value === "sqrt(" || value === "sin(" || value === "cos(" || value === "tan(" || value === "log10(" || value === "log(")) {
+          currentInput = value;
+        } else {
+          currentInput += value;
+        }
+      }
+      updateDisplay();
+      
+      // Shift와 Alpha는 입력 수행 후 일회성으로 자동 클리어
+      if (isShiftActive) toggleShift();
+      if (isAlphaActive) toggleAlpha();
+    }
+
+    function inputAns() {
+      if (currentInput === "0") {
+        currentInput = "Ans";
+      } else {
+        currentInput += "Ans";
+      }
+      updateDisplay();
+    }
+
+    function clearAll() {
+      currentInput = "0";
+      lcdResult.textContent = "0";
+      updateDisplay();
+    }
+
+    function deleteLast() {
+      if (currentInput.length > 1) {
+        const functions = ["sin(", "cos(", "tan(", "log(", "abs(", "asin(", "acos(", "atan("];
+        let detected = false;
+        for (let fn of functions) {
+          if (currentInput.endsWith(fn)) {
+            currentInput = currentInput.slice(0, -fn.length);
+            detected = true;
+            break;
+          }
+        }
+        if (currentInput.endsWith("log10(10")) {
+          currentInput = currentInput.slice(0, -6);
+          detected = true;
+        }
+        if (!detected) {
+          currentInput = currentInput.slice(0, -1);
+        }
+      } else {
+        currentInput = "0";
+      }
+      updateDisplay();
+    }
+
+    // ----------------------------------------------------
+    // 5. 정밀 수학적 연산 및 파싱엔진 (Math.js 연동)
+    // ----------------------------------------------------
+    function calculate() {
+      try {
+        let expression = currentInput;
+
+        // Ans 값 주입 치환
+        expression = expression.replaceAll("Ans", `(${lastResult})`);
+
+        // 삼각비 연산 각도 모드 프리뷰 파싱 (DEG <-> RAD)
+        if (angleMode === "DEG") {
+          expression = processTrigForDeg(expression);
+        }
+
+        // 수식 연산 엔진 구동
+        let rawResult = math.evaluate(expression);
+
+        if (typeof rawResult === 'number') {
+          if (!isFinite(rawResult)) {
+            lcdResult.textContent = "Math ERROR";
+            return;
+          }
+          lastResult = math.format(rawResult, { precision: 12 });
+          
+          if (Math.abs(rawResult) < 1e-10 && rawResult !== 0) {
+            lastResult = "0";
+          }
+        } else {
+          lastResult = String(rawResult);
+        }
+
+        // 소수점 오차 최종 후처리 보정
+        if (!isNaN(lastResult)) {
+          const parsedNum = parseFloat(lastResult);
+          if (parsedNum % 1 !== 0) {
+            lastResult = parseFloat(parsedNum.toFixed(10)).toString();
+          }
+        }
+
+        lcdResult.textContent = lastResult;
+
+      } catch (error) {
+        console.error(error);
+        lcdResult.textContent = "Syntax ERROR";
+      }
+    }
+
+    function processTrigForDeg(expr) {
+      const trigFuncs = ["sin", "cos", "tan", "asin", "acos", "atan"];
+      
+      trigFuncs.forEach(func => {
+        let index = expr.indexOf(func + "(");
+        while (index !== -1) {
+          let openBrackets = 1;
+          let i = index + func.length + 1;
+          while (openBrackets > 0 && i < expr.length) {
+            if (expr[i] === '(') openBrackets++;
+            if (expr[i] === ')') openBrackets--;
+            i++;
+          }
+          
+          const inside = expr.substring(index + func.length + 1, i - 1);
+          if (func.startsWith("a")) {
+            expr = expr.substring(0, index) + `(unit(${func}(${inside}), "rad") to "deg")` + expr.substring(i);
+          } else {
+            expr = expr.substring(0, index) + `${func}(unit(${inside}, "deg"))` + expr.substring(i);
+          }
+          
+          index = expr.indexOf(func + "(", i);
+        }
+      });
+      return expr;
+    }
+
+    // ----------------------------------------------------
+    // 6. UI 및 인디케이터 렌더링 동기화
+    // ----------------------------------------------------
+    function updateDisplay() {
+      let displayValue = currentInput;
+      displayValue = displayValue.replaceAll("*10^", "×10^");
+      displayValue = displayValue.replaceAll("*", "×");
+      displayValue = displayValue.replaceAll("/", "÷");
+      displayValue = displayValue.replaceAll("log10(", "log(");
+      displayValue = displayValue.replaceAll("log(", "ln(");
+
+      lcdFormula.textContent = displayValue;
+      
+      // 스크롤 포커스를 지속적으로 최우측으로 이동시킴
+      setTimeout(() => {
+        lcdFormula.scrollLeft = lcdFormula.scrollWidth;
+      }, 5);
+    }
+
+    function toggleShift() {
+      isShiftActive = !isShiftActive;
+      if (isShiftActive && isAlphaActive) isAlphaActive = false;
+      updateIndicators();
+    }
+
+    function toggleAlpha() {
+      isAlphaActive = !isAlphaActive;
+      if (isAlphaActive && isShiftActive) isShiftActive = false;
+      updateIndicators();
+    }
+
+    function toggleAngleMode() {
+      angleMode = angleMode === "DEG" ? "RAD" : "DEG";
+      angleModeIndicator.textContent = angleMode;
+      if (currentInput !== "0") {
+        calculate();
+      }
+    }
+
+    function moveCursor(direction) {
+      if (direction === 'left') {
+        lcdFormula.scrollLeft -= 60;
+      } else {
+        lcdFormula.scrollLeft += 60;
+      }
+    }
+
+    function updateIndicators() {
+      if (isShiftActive) {
+        shiftIndicator.classList.remove('opacity-10');
+        shiftIndicator.classList.add('opacity-100');
+      } else {
+        shiftIndicator.classList.remove('opacity-100');
+        shiftIndicator.classList.add('opacity-10');
+      }
+
+      if (isAlphaActive) {
+        alphaIndicator.classList.remove('opacity-10');
+        alphaIndicator.classList.add('opacity-100');
+      } else {
+        alphaIndicator.classList.remove('opacity-100');
+        alphaIndicator.classList.add('opacity-10');
+      }
+    }
+
+    // ----------------------------------------------------
+    // 7. PC 환경 대응 키보드 입력 브릿지
+    // ----------------------------------------------------
+    document.addEventListener('keydown', (event) => {
+      const key = event.key;
+      if (key >= '0' && key <= '9') {
+        input(key);
+      } else if (key === '.') {
+        input('.');
+      } else if (key === '+') {
+        input('+');
+      } else if (key === '-') {
+        input('-');
+      } else if (key === '*') {
+        input('*');
+      } else if (key === '/') {
+        input('/');
+      } else if (key === 'Enter' || key === '=') {
+        event.preventDefault();
+        calculate();
+      } else if (key === 'Backspace') {
+        deleteLast();
+      } else if (key === 'Escape') {
+        clearAll();
+      } else if (key === '(' || key === ')') {
+        input(key);
+      }
+    });
+
+    // 최초 인디케이터 세팅 갱신
+    updateIndicators();
+  </script>
+</body>
+</html>
+
+```
